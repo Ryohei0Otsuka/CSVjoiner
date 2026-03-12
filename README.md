@@ -18,13 +18,13 @@ Flexible CSV horizontal join tool with detail aggregation.
 
 ---
 
-# 🖥 GUI
+## 🖥 GUI
 
 ![CSV Joiner Neon GUI](docs/screenshot.png)
 
 ---
 
-# 🚀 Features
+## 🚀 Features
 
 ✔ CSV横結合 (Horizontal Join)
 
@@ -53,19 +53,19 @@ Flexible CSV horizontal join tool with detail aggregation.
 
 ---
 
-# 📦 Download (Windows)
+## 📦 Download (Windows)
 
 Pythonが無くても使用できます。
 
 👉 https://github.com/Ryohei0Otsuka/CSVjoiner/releases
 
-# 🧩 CSV Structure
+---
+
+## 🧩 CSV Structure
 
 このツールは **3種類のCSV** を扱います。
 
----
-
-## A.csv（基本データ）
+### A.csv（基本データ）
 
 1キー = 1行
 
@@ -75,7 +75,7 @@ Pythonが無くても使用できます。
 
 ---
 
-## B.csv（明細データ）
+### B.csv（明細データ）
 
 1キー = 複数行
 
@@ -95,7 +95,7 @@ B.csv はキーごとに集約されます。
 
 ---
 
-## C.csv（基本データ）
+### C.csv（基本データ）
 
 | ID   | 通勤経路  |
 | ---- | ----- |
@@ -105,7 +105,7 @@ B.csv はキーごとに集約されます。
 
 ---
 
-# 🖥 GUI Usage
+## 🖥 GUI Usage
 
 起動
 
@@ -126,7 +126,7 @@ python CSVjoiner.py
 
 ---
 
-# 💻 CLI Usage
+## 💻 CLI Usage
 
 ```
 python CSVjoiner.py A.csv B.csv C.csv merged.csv
@@ -140,7 +140,7 @@ python CSVjoiner.py A.csv B.csv C.csv merged.csv ID 名前 日付 金額
 
 ---
 
-# ⚙ Requirements
+## ⚙ Requirements
 
 ```
 pandas
@@ -154,7 +154,7 @@ pip install pandas
 
 ---
 
-# 🔧 Build EXE
+## 🔧 Build EXE
 
 ```
 pip install pyinstaller
@@ -172,7 +172,7 @@ dist/CSVjoiner.exe
 
 ---
 
-# 🧪 Sample Data
+## 🧪 Sample Data
 
 ```
 sample/
@@ -185,7 +185,7 @@ sample/
 
 ---
 
-# 📁 Repository Structure
+## 📁 Repository Structure
 
 ```
 CSVjoiner
@@ -206,7 +206,7 @@ EXEは **GitHub Releases** に配置しています。
 
 ---
 
-# 🧠 Development
+## 🧠 Development
 
 このツールは **Vibe Coding（バイブコーディング）** によって開発されています。
 
@@ -223,6 +223,6 @@ AIと対話しながら
 
 ---
 
-# 📜 License
+## 📜 License
 
 MIT License
