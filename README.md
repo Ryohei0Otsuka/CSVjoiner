@@ -57,13 +57,7 @@ Flexible CSV horizontal join tool with detail aggregation.
 
 Pythonが無くても使用できます。
 
-EXEはこちら（GitHub Releases）
-
-```
-https://github.com/YOURNAME/CSVjoiner/releases
-```
-
----
+👉 https://github.com/Ryohei0Otsuka/CSVjoiner/releases
 
 # 🧩 CSV Structure
 
