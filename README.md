@@ -58,6 +58,27 @@ v2ではその前提を廃止し、CSV処理そのものを3つの操作へ整�
 - CSV以外のファイルは対象外
 - ローカル処理のみ
 
+
+## Sample data
+
+`sample/` には、公開用の架空の生徒データを収録しています。実在する人物・学校とは関係ありません。
+
+```text
+sample/
+├─ students.csv   # 生徒ID / 氏名 / クラス / 入学日
+├─ scores.csv     # 受験者ID / 科目 / 点数 / 試験日
+└─ clubs.csv      # 会員ID / 部活動 / 役割
+```
+
+試し方の例:
+
+- **SPLIT**: `students.csv` を `クラス` で分割して `1-A.csv` / `1-B.csv` / `1-C.csv` を生成
+- **JOIN**: `students.csv` の `生徒ID` と `scores.csv` の `受験者ID` を指定して LEFT / INNER JOIN
+- **JOIN**: `students.csv` の `生徒ID` と `clubs.csv` の `会員ID` を指定し、左のみ / 右のみを確認
+- **TRANSFORM**: `students.csv` の `入学日` を `2026-04-07` 形式へ変換、列名変更や列順変更を試す
+
+`scores.csv` は同じ生徒IDを複数行持つため、JOIN時の **1対多 / 重複キー警告** も確認できます。
+
 ## Setup
 
 ```bash
