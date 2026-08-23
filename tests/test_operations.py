@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from csvjoiner.core import read_csv_flexible, sanitize_filename
+from csvjoiner.core import export_csv, format_preview_value, read_csv_flexible, sanitize_filename
 from csvjoiner.models import TransformStep
 from csvjoiner.operations import (
     analyze_key_join,
@@ -108,3 +108,27 @@ def test_sample_students_clubs_join_has_left_and_right_only_keys():
     assert diag.matched_keys == 4
     assert diag.left_only_keys == 2
     assert diag.right_only_keys == 1
+
+
+def test_embedded_newline_roundtrip_and_crlf_output(tmp_path):
+    source = tmp_path / "multiline.csv"
+    source.write_bytes(
+        "生徒ID,メモ\r\nS001,\"1行目\r\n2行目\"\r\nS002,通常\r\n".encode("utf-8-sig")
+    )
+    doc = read_csv_flexible(source)
+    assert len(doc.dataframe) == 2
+    assert "1行目" in doc.dataframe.loc[0, "メモ"]
+    assert "2行目" in doc.dataframe.loc[0, "メモ"]
+
+    output = tmp_path / "out.csv"
+    export_csv(doc.dataframe, output, "UTF-8 BOM")
+    raw = output.read_bytes()
+    assert b"\r\n" in raw
+
+    reread = read_csv_flexible(output)
+    assert reread.dataframe.equals(doc.dataframe)
+
+
+def test_preview_marks_embedded_newlines_without_changing_data():
+    value = "1行目\r\n2行目\n3行目"
+    assert format_preview_value(value) == "1行目 ↵ 2行目 ↵ 3行目"

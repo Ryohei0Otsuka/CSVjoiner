@@ -61,13 +61,24 @@ def read_csv_flexible(path: Path) -> CsvDocument:
     raise CsvToolError(f"CSVを読み込めませんでした: {path.name}\n{last_error}")
 
 
+def format_preview_value(value: object) -> str:
+    """Render embedded line breaks visibly without mutating the underlying data."""
+    return str(value).replace("\r\n", " ↵ ").replace("\r", " ↵ ").replace("\n", " ↵ ")
+
+
 def export_csv(df: pd.DataFrame, path: Path, encoding_label: str = "UTF-8 BOM") -> None:
     encoding = EXPORT_ENCODINGS.get(encoding_label)
     if not encoding:
         raise CsvToolError(f"未対応の文字コードです: {encoding_label}")
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        df.to_csv(path, index=False, encoding=encoding, quoting=csv.QUOTE_MINIMAL)
+        df.to_csv(
+            path,
+            index=False,
+            encoding=encoding,
+            quoting=csv.QUOTE_MINIMAL,
+            lineterminator="\r\n",
+        )
     except UnicodeEncodeError as exc:
         raise CsvToolError(
             f"{encoding_label} では表現できない文字が含まれています。UTF-8 BOM での出力を試してください。"

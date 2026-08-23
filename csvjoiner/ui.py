@@ -7,7 +7,14 @@ from tkinter import filedialog, messagebox, ttk
 import pandas as pd
 
 from . import __version__
-from .core import CsvToolError, EXPORT_ENCODINGS, dataframe_preview, export_csv, read_csv_flexible
+from .core import (
+    CsvToolError,
+    EXPORT_ENCODINGS,
+    dataframe_preview,
+    export_csv,
+    format_preview_value,
+    read_csv_flexible,
+)
 from .models import CsvDocument, TransformStep
 from .operations import (
     apply_transform_pipeline,
@@ -56,7 +63,7 @@ class PreviewTable(ttk.Frame):
             self.tree.heading(col, text=col)
             self.tree.column(col, width=130, minwidth=70, stretch=True)
         for row in frame.itertuples(index=False, name=None):
-            self.tree.insert("", "end", values=[str(v) for v in row])
+            self.tree.insert("", "end", values=[format_preview_value(v) for v in row])
 
     def clear(self) -> None:
         self.tree.delete(*self.tree.get_children())
