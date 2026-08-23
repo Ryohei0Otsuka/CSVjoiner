@@ -1,228 +1,126 @@
-# ✨ CSV Joiner Neon
+# CSVjoiner v2
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue)
-![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
-![License](https://img.shields.io/badge/License-MIT-green)
+**JOIN / SPLIT / TRANSFORM**
 
-⚡ **Vibe Coding Project**
+CSVの分割・結合・整形を、コードを書かずにローカルで処理する軽量GUIツールです。
 
-このツールは **バイブコーディング（Vibe Coding）** を取り入れて開発されています。
-AIと対話しながら **設計 / CSV処理 / UI改善 / 汎用化** を反復的に試行錯誤して構築しました。
+> CSV加工でExcelを開く回数を減らす。
 
----
+## What changed
 
-Flexible CSV horizontal join tool with detail aggregation.
+旧版は `A.csv / B.csv / C.csv` の3ファイルと、B.csvだけを明細集約する特定用途の横結合ツールでした。
 
-キー列を自由に指定できる
-**ネオンUIのCSV横結合ツール**です。
+v2ではその前提を廃止し、CSV処理そのものを3つの操作へ整理しています。
 
----
+- **JOIN**: 縦結合 / LEFT JOIN / INNER JOIN
+- **SPLIT**: 指定列の値ごとにCSVを自動分割
+- **TRANSFORM**: 列名・列順・値・日付形式などをGUIで整形
 
-## 🖥 GUI
+処理はすべて **CHECK / PREVIEW → EXPORT** の順で行い、実行前に結果を確認できます。
 
-![CSV Joiner Neon GUI](docs/screenshot.png)
+## Features
 
----
+### JOIN
 
-## 🚀 Features
+- 複数CSVの縦結合
+- 左右で異なるキー列を指定可能
+- LEFT JOIN / INNER JOIN
+- 一致キー / 左のみ / 右のみを事前集計
+- 左右の重複キーを検知
+- 多対多JOINを警告
+- 結果プレビュー
 
-✔ CSV横結合 (Horizontal Join)
+### SPLIT
 
-✔ キー列自由指定
+- 1列をキーに自動分割
+- 分割件数を事前プレビュー
+- 空欄キーを除外 / `blank.csv` として出力
+- Windowsで使えないファイル名文字を自動置換
+- 同名ファイルは `_2`, `_3` のように衝突回避
 
-```
-社員番号
-出席番号
-会員ID
-ユーザーID
-```
+### TRANSFORM
 
-✔ B.csv 明細データ自動集約
+- 列名変更
+- 列削除
+- 列順変更
+- 固定値列追加
+- 文字列置換
+- 前後空白削除
+- 日付形式変換
+- 0埋め
+- 複数処理をパイプラインとして順番に適用
+- BEFORE / AFTER プレビュー
 
-```
-明細金額合計
-明細件数
-最初日付
-最終日付
-```
+### Common
 
-✔ GUIアプリ
-✔ CLI実行可能
-✔ Windows EXE配布
-✔ Neon / Modern UI
+- UTF-8 BOM / CP932 / UTF-8 の順でCSVを自動読込
+- 文字コードを選んで出力
+- CSV以外のファイルは対象外
+- ローカル処理のみ
 
----
+## Setup
 
-## 📦 Download (Windows)
-
-Pythonが無くても使用できます。
-
-👉 https://github.com/Ryohei0Otsuka/CSVjoiner/releases
-
----
-
-## 🧩 CSV Structure
-
-このツールは **3種類のCSV** を扱います。
-
-### A.csv（基本データ）
-
-1キー = 1行
-
-| ID   | 名前    | 勤務日数 |
-| ---- | ----- | ---- |
-| 1001 | ユーザーA | 20   |
-
----
-
-### B.csv（明細データ）
-
-1キー = 複数行
-
-| ID   | 日付         | 金額  |
-| ---- | ---------- | --- |
-| 1001 | 2026-03-01 | 500 |
-| 1001 | 2026-03-02 | 500 |
-
-B.csv はキーごとに集約されます。
-
-```
-明細金額合計
-明細件数
-最初日付
-最終日付
-```
-
----
-
-### C.csv（基本データ）
-
-| ID   | 通勤経路  |
-| ---- | ----- |
-| 1001 | A駅→B駅 |
-
-※サンプルデータはすべてダミーです。
-
----
-
-## 🖥 GUI Usage
-
-起動
-
-```
+```bash
+python -m pip install -r requirements.txt
 python CSVjoiner.py
 ```
 
-操作
+Python 3.11+ を推奨します。
 
-```
-1. A.csv選択
-2. B.csv選択
-3. C.csv選択
-4. 出力先指定
-5. キー列設定
-6. 実行
+## Build Windows EXE
+
+```bat
+build_windows.bat
 ```
 
----
+または手動で:
 
-## 💻 CLI Usage
-
-```
-python CSVjoiner.py A.csv B.csv C.csv merged.csv
-```
-
-列名指定
-
-```
-python CSVjoiner.py A.csv B.csv C.csv merged.csv ID 名前 日付 金額
+```bash
+python -m pip install pyinstaller
+python -m PyInstaller --clean --onefile --noconsole --name CSVjoiner CSVjoiner.py
 ```
 
----
+生成先:
 
-## ⚙ Requirements
-
-```
-pandas
-```
-
-インストール
-
-```
-pip install pandas
-```
-
----
-
-## 🔧 Build EXE
-
-```
-pip install pyinstaller
-```
-
-```
-pyinstaller --onefile --noconsole CSVjoiner.py
-```
-
-生成
-
-```
+```text
 dist/CSVjoiner.exe
 ```
 
----
+## Repository structure
 
-## 🧪 Sample Data
-
-```
-sample/
- ├ A.csv
- ├ B.csv
- └ C.csv
-```
-
-サンプルCSVを使えばすぐに動作確認できます。
-
----
-
-## 📁 Repository Structure
-
-```
-CSVjoiner
-│
-├ CSVjoiner.py
-├ README.md
-│
-├ docs
-│   └ screenshot.png
-│
-└ sample
-    ├ A.csv
-    ├ B.csv
-    └ C.csv
+```text
+CSVjoiner/
+├─ CSVjoiner.py
+├─ csvjoiner/
+│  ├─ __init__.py
+│  ├─ core.py
+│  ├─ models.py
+│  ├─ operations.py
+│  └─ ui.py
+├─ sample/
+├─ tests/
+├─ requirements.txt
+├─ requirements-dev.txt
+├─ build_windows.bat
+└─ README.md
 ```
 
-EXEは **GitHub Releases** に配置しています。
+## Design concept
 
----
+```text
+CSV INPUT
+   ↓
+JOIN / SPLIT / TRANSFORM
+   ↓
+CONDITION
+   ↓
+CHECK / PREVIEW
+   ↓
+EXPORT
+```
 
-## 🧠 Development
+旧版の「CSVを結合するツール」から、v2では「CSV加工そのものを安全に扱うツール」へ刷新しています。
 
-このツールは **Vibe Coding（バイブコーディング）** によって開発されています。
+## License
 
-AIと対話しながら
-
-* UI設計
-* CSV処理ロジック
-* エラーハンドリング
-* ツール汎用化
-
-を反復的に改善して構築しました。
-
-**実用ツールとしての動作を最優先に設計しています。**
-
----
-
-## 📜 License
-
-MIT License
+MIT
