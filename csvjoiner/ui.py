@@ -22,6 +22,7 @@ from .operations import (
     key_join,
     split_counts,
     split_dataframe,
+    split_plan,
     vertical_join,
 )
 
@@ -564,14 +565,16 @@ class CSVJoinerApp(tk.Tk):
         left_box = tk.Frame(file_grid, bg=COLORS["surface"])
         left_box.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         self._file_summary_label(left_box, self.join_left_summary).pack(fill="x")
-        self._button(left_box, "Choose left CSV", lambda: self._load_join_side("left"), "secondary").pack(fill="x", pady=(7, 0))
+        self.join_left_file_button = self._button(left_box, "左CSVを選択", lambda: self._load_join_side("left"), "secondary")
+        self.join_left_file_button.pack(fill="x", pady=(7, 0))
 
         right_box = tk.Frame(file_grid, bg=COLORS["surface"])
         right_box.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self._file_summary_label(right_box, self.join_right_summary).pack(fill="x")
-        self._button(right_box, "Choose right CSV", lambda: self._load_join_side("right"), "secondary").pack(fill="x", pady=(7, 0))
+        self.join_right_file_button = self._button(right_box, "右CSVを選択", lambda: self._load_join_side("right"), "secondary")
+        self.join_right_file_button.pack(fill="x", pady=(7, 0))
 
-        self.join_stack_button = self._button(files_body, "Choose multiple CSV files", self._load_vertical_files, "secondary")
+        self.join_stack_button = self._button(files_body, "結合するCSVをまとめて選択", self._load_vertical_files, "secondary")
         self.join_stack_button.pack(fill="x", pady=(10, 0))
 
         settings_grid = tk.Frame(settings_body, bg=COLORS["surface"])
@@ -588,6 +591,8 @@ class CSVJoinerApp(tk.Tk):
         right_key_wrap.grid(row=0, column=1, sticky="ew", padx=(6, 0))
         self.join_right_combo = self._combo(right_key_wrap, "RIGHT KEY", self.join_right_key)
         self.join_right_combo.master.pack(fill="x")
+        self.join_left_combo.bind("<<ComboboxSelected>>", lambda _e: self._invalidate_join_result("JOINキーが変更されました。再解析してください。"))
+        self.join_right_combo.bind("<<ComboboxSelected>>", lambda _e: self._invalidate_join_result("JOINキーが変更されました。再解析してください。"))
 
         tk.Label(
             settings_body,
@@ -603,7 +608,7 @@ class CSVJoinerApp(tk.Tk):
         self.join_left_type_button.pack(side="left", fill="x", expand=True)
         self.join_inner_type_button = self._button(type_row, "INNER", lambda: self._set_join_type("inner"))
         self.join_inner_type_button.pack(side="left", fill="x", expand=True, padx=(8, 0))
-        self.join_preview_button = self._button(settings_body, "Analyze & Preview", self._run_join_preview, "primary")
+        self.join_preview_button = self._button(settings_body, "解析してプレビュー", self._run_join_preview, "primary")
         self.join_preview_button.pack(fill="x", pady=(14, 0))
 
         metrics_card, metrics_body = self._card(body, "CHECK", "一致・片側のみ・重複を実行前に確認")
@@ -615,7 +620,7 @@ class CSVJoinerApp(tk.Tk):
         self._metric(metrics, "MATCHED KEYS", self.join_metric_match, "success").grid(row=0, column=0, sticky="ew", padx=(0, 5))
         self._metric(metrics, "LEFT ONLY", self.join_metric_left).grid(row=0, column=1, sticky="ew", padx=5)
         self._metric(metrics, "RIGHT ONLY", self.join_metric_right).grid(row=0, column=2, sticky="ew", padx=5)
-        self._metric(metrics, "DUPLICATE KEYS", self.join_metric_dups, "warning").grid(row=0, column=3, sticky="ew", padx=5)
+        self._metric(metrics, "DUP KEYS L / R", self.join_metric_dups, "warning").grid(row=0, column=3, sticky="ew", padx=5)
         self._metric(metrics, "OUTPUT ROWS", self.join_metric_rows, "accent").grid(row=0, column=4, sticky="ew", padx=(5, 0))
         tk.Label(
             metrics_body,
@@ -638,17 +643,52 @@ class CSVJoinerApp(tk.Tk):
         export.grid_columnconfigure(0, weight=1)
         path_wrap = tk.Frame(export, bg=COLORS["surface"])
         path_wrap.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self._field(path_wrap, "OUTPUT", self.join_output).master.pack(fill="x")
-        self._button(export, "Browse", self._choose_join_output).grid(row=0, column=1, sticky="s", padx=(0, 8))
-        enc_wrap = tk.Frame(export, bg=COLORS["surface"])
-        enc_wrap.grid(row=0, column=2, sticky="s", padx=(0, 8))
-        self._combo(enc_wrap, "ENCODING", self.join_encoding, list(EXPORT_ENCODINGS), width=13).master.pack(fill="x")
-        self._button(export, "Export CSV", self._export_join, "primary").grid(row=0, column=3, sticky="s")
+        self._field(path_wrap, "出力先", self.join_output).master.pack(fill="x")
+        self._button(export, "参照", self._choose_join_output).grid(row=0, column=1, sticky="s")
+        footer = tk.Frame(export, bg=COLORS["surface"])
+        footer.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        footer.grid_columnconfigure(1, weight=1)
+        enc_wrap = tk.Frame(footer, bg=COLORS["surface"])
+        enc_wrap.grid(row=0, column=0, sticky="w")
+        self._combo(enc_wrap, "文字コード", self.join_encoding, list(EXPORT_ENCODINGS), width=13).master.pack(fill="x")
+        self.join_export_button = self._button(footer, "CSVを書き出す", self._export_join, "primary")
+        self.join_export_button.grid(row=0, column=2, sticky="e")
 
         self._set_join_mode("key")
         self._set_join_type("left")
 
+    def _refresh_join_file_summaries(self) -> None:
+        if self.join_mode.get() == "vertical":
+            if self.join_files:
+                lines = [f"{d.path.name} · {d.rows:,} rows · {len(d.columns)} cols" for d in self.join_files[:3]]
+                more = f"\n+ {len(self.join_files) - 3} more" if len(self.join_files) > 3 else ""
+                self.join_left_summary.set(f"STACK INPUT\n{len(self.join_files)} files\n" + "\n".join(lines) + more)
+            else:
+                self.join_left_summary.set("STACK INPUT\n未選択")
+            self.join_right_summary.set("STACK MODE\n右側CSVの指定は不要です。")
+            return
+
+        if self.join_left:
+            self.join_left_summary.set(
+                f"LEFT CSV\n{self.join_left.path.name}\n{self.join_left.rows:,} rows · {len(self.join_left.columns)} cols · {self.join_left.encoding}"
+            )
+        else:
+            self.join_left_summary.set("LEFT CSV\n未選択")
+        if self.join_right:
+            self.join_right_summary.set(
+                f"RIGHT CSV\n{self.join_right.path.name}\n{self.join_right.rows:,} rows · {len(self.join_right.columns)} cols · {self.join_right.encoding}"
+            )
+        else:
+            self.join_right_summary.set("RIGHT CSV\n未選択")
+
+    def _invalidate_join_result(self, message: str = "条件が変更されました。再解析してください。") -> None:
+        self.join_result = None
+        self.join_preview.clear()
+        self._reset_join_metrics()
+        self.join_warning.set(message)
+
     def _set_join_mode(self, mode: str) -> None:
+        changed = self.join_mode.get() != mode
         self.join_mode.set(mode)
         is_key = mode == "key"
         self.join_key_mode_button.configure(
@@ -665,19 +705,31 @@ class CSVJoinerApp(tk.Tk):
         self.join_left_type_button.configure(state="normal" if is_key else "disabled")
         self.join_inner_type_button.configure(state="normal" if is_key else "disabled")
         self.join_stack_button.configure(
+            state="disabled" if is_key else "normal",
             bg=COLORS["surface_alt"] if not is_key else COLORS["surface_soft"],
             fg=COLORS["text"] if not is_key else COLORS["faint"],
         )
-        if is_key:
+        self.join_left_file_button.configure(state="normal" if is_key else "disabled")
+        self.join_right_file_button.configure(state="normal" if is_key else "disabled")
+        self._refresh_join_file_summaries()
+        if changed:
+            self._invalidate_join_result(
+                "左右のキーを指定し、重複や多対多を確認してから出力します。" if is_key
+                else "STACKでは列名を基準に揃え、不足列を空欄で補完して縦結合します。"
+            )
+        elif is_key:
             self.join_warning.set("左右のキーを指定し、重複や多対多を確認してから出力します。")
         else:
             self.join_warning.set("STACKでは列名を基準に揃え、不足列を空欄で補完して縦結合します。")
 
     def _set_join_type(self, join_type: str) -> None:
+        changed = self.join_type.get() != join_type
         self.join_type.set(join_type)
         is_left = join_type == "left"
         self.join_left_type_button.configure(bg=COLORS["accent"] if is_left else COLORS["surface_alt"])
         self.join_inner_type_button.configure(bg=COLORS["surface_alt"] if is_left else COLORS["accent"])
+        if changed:
+            self._invalidate_join_result("JOIN TYPEが変更されました。再解析してください。")
 
     def _load_join_side(self, side: str) -> None:
         path = self._browse_csv()
@@ -685,17 +737,15 @@ class CSVJoinerApp(tk.Tk):
             return
         try:
             doc = read_csv_flexible(Path(path))
-            summary = f"{side.upper()} CSV\n{doc.path.name}\n{doc.rows:,} rows · {len(doc.columns)} cols · {doc.encoding}"
             if side == "left":
                 self.join_left = doc
                 self.join_left_combo["values"] = doc.columns
                 self.join_left_key.set(doc.columns[0] if doc.columns else "")
-                self.join_left_summary.set(summary)
             else:
                 self.join_right = doc
                 self.join_right_combo["values"] = doc.columns
                 self.join_right_key.set(doc.columns[0] if doc.columns else "")
-                self.join_right_summary.set(summary)
+            self._refresh_join_file_summaries()
             self.join_result = None
             self.join_preview.clear()
             self._reset_join_metrics()
@@ -711,10 +761,7 @@ class CSVJoinerApp(tk.Tk):
             self.join_files = [read_csv_flexible(Path(p)) for p in paths]
             if len(self.join_files) < 2:
                 raise CsvToolError("STACKには2つ以上のCSVを選択してください。")
-            lines = [f"{d.path.name} · {d.rows:,} rows · {len(d.columns)} cols" for d in self.join_files[:4]]
-            more = f"\n+ {len(self.join_files) - 4} more" if len(self.join_files) > 4 else ""
-            self.join_left_summary.set(f"STACK INPUT\n{len(self.join_files)} files\n" + "\n".join(lines) + more)
-            self.join_right_summary.set("STACK MODE\n右側CSVの指定は不要です。")
+            self._refresh_join_file_summaries()
             self.join_result = None
             self.join_preview.clear()
             self._reset_join_metrics()
@@ -759,7 +806,7 @@ class CSVJoinerApp(tk.Tk):
                 self.join_metric_match.set(f"{diag.matched_keys:,}")
                 self.join_metric_left.set(f"{diag.left_only_keys:,}")
                 self.join_metric_right.set(f"{diag.right_only_keys:,}")
-                self.join_metric_dups.set(f"{diag.left_duplicate_keys + diag.right_duplicate_keys:,}")
+                self.join_metric_dups.set(f"{diag.left_duplicate_keys:,} / {diag.right_duplicate_keys:,}")
                 self.join_metric_rows.set(f"{diag.result_rows:,}")
                 self.join_warning.set(" / ".join(diag.warnings) if diag.warnings else "No warnings — キー構成に問題は見つかりませんでした。")
                 self.join_output.set(str(self.join_left.path.parent / "merged.csv"))
@@ -796,6 +843,7 @@ class CSVJoinerApp(tk.Tk):
         self.split_file_count = tk.StringVar(value="—")
         self.split_row_count = tk.StringVar(value="—")
         self.split_blank_count = tk.StringVar(value="—")
+        self.split_analysis_valid = False
 
         _, body = self._page(
             "split",
@@ -814,12 +862,13 @@ class CSVJoinerApp(tk.Tk):
         settings_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
 
         self._file_summary_label(input_body, self.split_summary).pack(fill="x")
-        self._button(input_body, "Choose CSV", self._load_split_file, "primary").pack(fill="x", pady=(10, 0))
+        self._button(input_body, "CSVを選択", self._load_split_file, "primary").pack(fill="x", pady=(10, 0))
 
         combo_wrap = tk.Frame(settings_body, bg=COLORS["surface"])
         combo_wrap.pack(fill="x")
         self.split_key_combo = self._combo(combo_wrap, "SPLIT KEY", self.split_key)
         self.split_key_combo.master.pack(fill="x")
+        self.split_key_combo.bind("<<ComboboxSelected>>", lambda _e: self._invalidate_split_analysis())
 
         blank_row = tk.Frame(settings_body, bg=COLORS["surface"])
         blank_row.pack(fill="x", pady=(13, 0))
@@ -834,9 +883,10 @@ class CSVJoinerApp(tk.Tk):
             activeforeground=COLORS["text"],
             font=(FONT, 9),
             relief="flat",
+            command=self._invalidate_split_analysis,
         )
         self.split_blank_check.pack(anchor="w")
-        self._button(settings_body, "Analyze split", self._preview_split_counts, "primary").pack(fill="x", pady=(12, 0))
+        self._button(settings_body, "分割内容を確認", self._preview_split_counts, "primary").pack(fill="x", pady=(12, 0))
 
         check_card, check_body = self._card(body, "CHECK", "分割前の見込み")
         check_card.pack(fill="x", pady=(16, 0))
@@ -858,12 +908,16 @@ class CSVJoinerApp(tk.Tk):
         export.grid_columnconfigure(0, weight=1)
         path_wrap = tk.Frame(export, bg=COLORS["surface"])
         path_wrap.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self._field(path_wrap, "OUTPUT FOLDER", self.split_output_dir).master.pack(fill="x")
-        self._button(export, "Browse", self._choose_split_output).grid(row=0, column=1, sticky="s", padx=(0, 8))
-        enc_wrap = tk.Frame(export, bg=COLORS["surface"])
-        enc_wrap.grid(row=0, column=2, sticky="s", padx=(0, 8))
-        self._combo(enc_wrap, "ENCODING", self.split_encoding, list(EXPORT_ENCODINGS), width=13).master.pack(fill="x")
-        self._button(export, "Export files", self._export_split, "primary").grid(row=0, column=3, sticky="s")
+        self._field(path_wrap, "出力フォルダ", self.split_output_dir).master.pack(fill="x")
+        self._button(export, "参照", self._choose_split_output).grid(row=0, column=1, sticky="s")
+        footer = tk.Frame(export, bg=COLORS["surface"])
+        footer.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        footer.grid_columnconfigure(1, weight=1)
+        enc_wrap = tk.Frame(footer, bg=COLORS["surface"])
+        enc_wrap.grid(row=0, column=0, sticky="w")
+        self._combo(enc_wrap, "文字コード", self.split_encoding, list(EXPORT_ENCODINGS), width=13).master.pack(fill="x")
+        self.split_export_button = self._button(footer, "分割CSVを書き出す", self._export_split, "primary")
+        self.split_export_button.grid(row=0, column=2, sticky="e")
 
     def _load_split_file(self) -> None:
         path = self._browse_csv()
@@ -880,23 +934,37 @@ class CSVJoinerApp(tk.Tk):
             self.split_row_count.set(f"{self.split_doc.rows:,}")
             self.split_file_count.set("—")
             self.split_blank_count.set("—")
-            self.split_preview.show_dataframe(self.split_doc.dataframe)
-            self.status_var.set(f"Loaded {self.split_doc.path.name} for SPLIT")
+            self.split_analysis_valid = False
+            self.split_preview.clear()
+            self.status_var.set(f"Loaded {self.split_doc.path.name} — キーを選んで分割内容を確認してください。")
         except Exception as exc:
             self._show_error(exc)
+
+    def _invalidate_split_analysis(self) -> None:
+        self.split_analysis_valid = False
+        self.split_file_count.set("—")
+        self.split_blank_count.set("—")
+        if hasattr(self, "split_preview"):
+            self.split_preview.clear()
+        if self.split_doc:
+            self.status_var.set("SPLIT条件が変更されました。分割内容を再確認してください。")
 
     def _preview_split_counts(self) -> None:
         try:
             if not self.split_doc:
                 raise CsvToolError("CSVを選択してください。")
-            counts = split_counts(self.split_doc.dataframe, self.split_key.get())
+            plan = split_plan(
+                self.split_doc.dataframe,
+                self.split_key.get(),
+                include_blank=self.split_include_blank.get(),
+            )
             blank_rows = int((self.split_doc.dataframe[self.split_key.get()].astype(str).str.strip() == "").sum())
-            output_files = len(counts) if self.split_include_blank.get() else len(counts) - (1 if blank_rows else 0)
-            self.split_file_count.set(f"{max(output_files, 0):,}")
+            self.split_file_count.set(f"{len(plan):,}")
             self.split_row_count.set(f"{self.split_doc.rows:,}")
             self.split_blank_count.set(f"{blank_rows:,}")
-            self.split_preview.show_dataframe(counts, 500)
-            self.status_var.set("SPLIT analysis ready — 出力件数を確認してください。")
+            self.split_preview.show_dataframe(plan, 500)
+            self.split_analysis_valid = True
+            self.status_var.set("SPLIT analysis ready — 出力ファイル名と件数を確認してください。")
         except Exception as exc:
             self._show_error(exc)
 
@@ -909,6 +977,8 @@ class CSVJoinerApp(tk.Tk):
         try:
             if not self.split_doc:
                 raise CsvToolError("CSVを選択してください。")
+            if not self.split_analysis_valid:
+                raise CsvToolError("先に「分割内容を確認」を実行してください。")
             if not self.split_output_dir.get().strip():
                 raise CsvToolError("出力フォルダを指定してください。")
             groups = split_dataframe(
@@ -959,7 +1029,7 @@ class CSVJoinerApp(tk.Tk):
         input_row = tk.Frame(pipeline_body, bg=COLORS["surface"])
         input_row.pack(fill="x")
         self._file_summary_label(input_row, self.transform_summary).pack(side="left", fill="both", expand=True)
-        self._button(input_row, "Choose CSV", self._load_transform_file, "primary").pack(side="left", padx=(8, 0), fill="y")
+        self._button(input_row, "CSVを選択", self._load_transform_file, "primary").pack(side="left", padx=(8, 0), fill="y")
 
         tk.Label(
             pipeline_body,
@@ -986,8 +1056,8 @@ class CSVJoinerApp(tk.Tk):
         self.transform_step_list.pack(fill="both", expand=True)
         actions = tk.Frame(pipeline_body, bg=COLORS["surface"])
         actions.pack(fill="x", pady=(8, 0))
-        self._button(actions, "Remove selected", self._remove_transform_step, "ghost").pack(side="left")
-        self._button(actions, "Clear", self._clear_transform_steps, "danger").pack(side="left", padx=(7, 0))
+        self._button(actions, "選択したステップを削除", self._remove_transform_step, "ghost").pack(side="left")
+        self._button(actions, "すべてクリア", self._clear_transform_steps, "danger").pack(side="left", padx=(7, 0))
 
         op_values = [
             "rename | 列名変更",
@@ -1016,14 +1086,14 @@ class CSVJoinerApp(tk.Tk):
         values.pack(fill="x", pady=(10, 0))
         values.grid_columnconfigure(0, weight=1)
         values.grid_columnconfigure(1, weight=1)
-        v1_wrap = tk.Frame(values, bg=COLORS["surface"])
-        v1_wrap.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        self.transform_v1_wrap = tk.Frame(values, bg=COLORS["surface"])
+        self.transform_v1_wrap.grid(row=0, column=0, sticky="ew", padx=(0, 5))
         self.transform_v1_caption = tk.StringVar(value="VALUE 1")
-        self.transform_v1_entry = self._labeled_dynamic_field(v1_wrap, self.transform_v1_caption, self.transform_value1)
-        v2_wrap = tk.Frame(values, bg=COLORS["surface"])
-        v2_wrap.grid(row=0, column=1, sticky="ew", padx=(5, 0))
+        self.transform_v1_entry = self._labeled_dynamic_field(self.transform_v1_wrap, self.transform_v1_caption, self.transform_value1)
+        self.transform_v2_wrap = tk.Frame(values, bg=COLORS["surface"])
+        self.transform_v2_wrap.grid(row=0, column=1, sticky="ew", padx=(5, 0))
         self.transform_v2_caption = tk.StringVar(value="VALUE 2")
-        self.transform_v2_entry = self._labeled_dynamic_field(v2_wrap, self.transform_v2_caption, self.transform_value2)
+        self.transform_v2_entry = self._labeled_dynamic_field(self.transform_v2_wrap, self.transform_v2_caption, self.transform_value2)
 
         tk.Label(
             add_body,
@@ -1035,7 +1105,7 @@ class CSVJoinerApp(tk.Tk):
             anchor="w",
             wraplength=470,
         ).pack(fill="x", pady=(9, 0))
-        self._button(add_body, "Add step", self._add_transform_step, "primary").pack(fill="x", pady=(11, 0))
+        self._button(add_body, "ステップを追加", self._add_transform_step, "primary").pack(fill="x", pady=(11, 0))
         self._sync_transform_operation()
 
         stats_card, stats_body = self._card(body, "PIPELINE CHECK", "適用ステップと出力列")
@@ -1064,16 +1134,26 @@ class CSVJoinerApp(tk.Tk):
 
         export = tk.Frame(preview_body, bg=COLORS["surface"])
         export.pack(fill="x", pady=(12, 0))
-        export.grid_columnconfigure(1, weight=1)
-        self._button(export, "Apply & Preview", self._apply_transform_preview, "secondary").grid(row=0, column=0, sticky="s", padx=(0, 8))
+        export.grid_columnconfigure(0, weight=1)
         path_wrap = tk.Frame(export, bg=COLORS["surface"])
-        path_wrap.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-        self._field(path_wrap, "OUTPUT", self.transform_output).master.pack(fill="x")
-        self._button(export, "Browse", self._choose_transform_output).grid(row=0, column=2, sticky="s", padx=(0, 8))
-        enc_wrap = tk.Frame(export, bg=COLORS["surface"])
-        enc_wrap.grid(row=0, column=3, sticky="s", padx=(0, 8))
-        self._combo(enc_wrap, "ENCODING", self.transform_encoding, list(EXPORT_ENCODINGS), width=13).master.pack(fill="x")
-        self._button(export, "Export CSV", self._export_transform, "primary").grid(row=0, column=4, sticky="s")
+        path_wrap.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self._field(path_wrap, "出力先", self.transform_output).master.pack(fill="x")
+        self._button(export, "参照", self._choose_transform_output).grid(row=0, column=1, sticky="s")
+        footer = tk.Frame(export, bg=COLORS["surface"])
+        footer.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        footer.grid_columnconfigure(1, weight=1)
+        tk.Label(
+            footer,
+            text="ステップ追加・削除時にAfterを自動更新します。",
+            bg=COLORS["surface"],
+            fg=COLORS["muted"],
+            font=(FONT, 8),
+        ).grid(row=0, column=0, sticky="w")
+        enc_wrap = tk.Frame(footer, bg=COLORS["surface"])
+        enc_wrap.grid(row=0, column=2, sticky="e", padx=(12, 8))
+        self._combo(enc_wrap, "文字コード", self.transform_encoding, list(EXPORT_ENCODINGS), width=13).master.pack(fill="x")
+        self.transform_export_button = self._button(footer, "CSVを書き出す", self._export_transform, "primary")
+        self.transform_export_button.grid(row=0, column=3, sticky="e")
 
     def _labeled_dynamic_field(self, parent: tk.Widget, caption: tk.StringVar, variable: tk.StringVar) -> tk.Entry:
         tk.Label(
@@ -1117,6 +1197,7 @@ class CSVJoinerApp(tk.Tk):
             )
             self.transform_before.show_dataframe(self.transform_doc.dataframe)
             self.transform_after.clear()
+            self.transform_result = None
             self.transform_step_count.set("0")
             self.transform_output_cols.set(f"{len(self.transform_doc.columns):,}")
             self.status_var.set(f"Loaded {self.transform_doc.path.name} for TRANSFORM")
@@ -1146,6 +1227,22 @@ class CSVJoinerApp(tk.Tk):
         else:
             self.transform_col_combo.configure(state="readonly")
 
+        needs_v1 = op in {"rename", "add_fixed", "replace", "date", "zero_pad", "move"}
+        needs_v2 = op in {"add_fixed", "replace"}
+        self.transform_v1_entry.configure(state="normal" if needs_v1 else "disabled")
+        self.transform_v2_entry.configure(state="normal" if needs_v2 else "disabled")
+        if not needs_v1:
+            self.transform_value1.set("")
+        if not needs_v2:
+            self.transform_value2.set("")
+        self.transform_v1_wrap.grid_remove()
+        self.transform_v2_wrap.grid_remove()
+        if needs_v1 and needs_v2:
+            self.transform_v1_wrap.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+            self.transform_v2_wrap.grid(row=0, column=1, sticky="ew", padx=(5, 0))
+        elif needs_v1:
+            self.transform_v1_wrap.grid(row=0, column=0, columnspan=2, sticky="ew", padx=0)
+
     def _add_transform_step(self) -> None:
         try:
             if not self.transform_doc:
@@ -1158,11 +1255,16 @@ class CSVJoinerApp(tk.Tk):
             preview = apply_transform_pipeline(self.transform_doc.dataframe, [*self.transform_steps, step])
             self.transform_steps.append(step)
             self._refresh_transform_step_list()
+            self.transform_result = preview
+            self.transform_after.show_dataframe(preview)
             self.transform_step_count.set(str(len(self.transform_steps)))
             self.transform_output_cols.set(str(len(preview.columns)))
+            self.transform_col_combo["values"] = list(preview.columns)
+            if self.transform_column.get() not in preview.columns:
+                self.transform_column.set(str(preview.columns[0]) if len(preview.columns) else "")
             self.transform_value1.set("")
             self.transform_value2.set("")
-            self.status_var.set("Transform step added")
+            self.status_var.set(f"Transform step added — Afterを更新しました ({len(preview):,} rows)")
         except Exception as exc:
             self._show_error(exc)
 
@@ -1184,6 +1286,12 @@ class CSVJoinerApp(tk.Tk):
             try:
                 preview = apply_transform_pipeline(self.transform_doc.dataframe, self.transform_steps)
                 self.transform_output_cols.set(str(len(preview.columns)))
+                self.transform_col_combo["values"] = list(preview.columns)
+                if self.transform_steps:
+                    self.transform_result = preview
+                    self.transform_after.show_dataframe(preview)
+                if self.transform_column.get() not in preview.columns:
+                    self.transform_column.set(str(preview.columns[0]) if len(preview.columns) else "")
             except CsvToolError:
                 self.transform_output_cols.set("—")
 
@@ -1193,6 +1301,10 @@ class CSVJoinerApp(tk.Tk):
         self.transform_after.clear()
         self.transform_result = None
         self.transform_output_cols.set(str(len(self.transform_doc.columns)) if self.transform_doc else "—")
+        if self.transform_doc:
+            self.transform_col_combo["values"] = self.transform_doc.columns
+            self.transform_column.set(self.transform_doc.columns[0] if self.transform_doc.columns else "")
+        self.status_var.set("Transform steps cleared")
 
     def _apply_transform_preview(self) -> None:
         try:
@@ -1217,7 +1329,7 @@ class CSVJoinerApp(tk.Tk):
     def _export_transform(self) -> None:
         try:
             if self.transform_result is None:
-                raise CsvToolError("先に Apply & Preview を実行してください。")
+                raise CsvToolError("変換ステップを追加してAfterを確認してください。")
             if not self.transform_output.get().strip():
                 raise CsvToolError("出力先を指定してください。")
             export_csv(self.transform_result, Path(self.transform_output.get()), self.transform_encoding.get())

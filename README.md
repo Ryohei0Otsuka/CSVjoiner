@@ -41,15 +41,19 @@ v2ではGUIも作り直し、標準的なタブ型ユーティリティから **
 - 一致キー / 左のみ / 右のみを事前集計
 - 左右の重複キーを検知
 - 多対多JOINを警告
+- JOIN判定時はキー前後の空白を無視（元データは保持）
+- 空欄キー同士は一致させない
+- 条件変更後は古いPreviewを無効化し、再確認前の誤出力を防止
 - 結果プレビュー
 
 ### SPLIT
 
 - 1列をキーに自動分割
-- 分割件数を事前プレビュー
+- 分割件数と実際の出力ファイル名を事前プレビュー
 - 空欄キーを除外 / `blank.csv` として出力
 - Windowsで使えないファイル名文字を自動置換
 - 同名ファイルは `_2`, `_3` のように衝突回避
+- キーや空欄設定を変更したらPreviewを無効化し、再確認を要求
 
 ### TRANSFORM
 
@@ -62,11 +66,13 @@ v2ではGUIも作り直し、標準的なタブ型ユーティリティから **
 - 日付形式変換
 - 0埋め
 - 複数処理をパイプラインとして順番に適用
+- 列名変更後の新しい列を次ステップでそのまま選択可能
+- ステップ追加・削除時にAFTERを自動更新
 - BEFORE / AFTER プレビュー
 
 ### Common
 
-- UTF-8 BOM / CP932 / UTF-8 の順でCSVを自動読込
+- UTF-8 BOM / UTF-8 / CP932 の順でCSVを自動読込
 - 文字コードを選んで出力
 - CSV以外のファイルは対象外
 - ローカル処理のみ
@@ -80,7 +86,8 @@ v2ではGUIも作り直し、標準的なタブ型ユーティリティから **
 sample/
 ├─ students.csv   # 生徒ID / 氏名 / クラス / 入学日
 ├─ scores.csv     # 受験者ID / 科目 / 点数 / 試験日
-└─ clubs.csv      # 会員ID / 部活動 / 役割
+├─ clubs.csv      # 会員ID / 部活動 / 役割
+└─ validation/    # 空欄・重複・改行・CP932等の自己検証用
 ```
 
 試し方の例:
@@ -91,6 +98,23 @@ sample/
 - **TRANSFORM**: `students.csv` の `入学日` を `2026-04-07` 形式へ変換、列名変更や列順変更を試す
 
 `scores.csv` は同じ生徒IDを複数行持つため、JOIN時の **1対多 / 重複キー警告** も確認できます。
+
+## Self validation
+
+境界ケース用CSVを使った回帰テストと自己検証スクリプトを同梱しています。
+
+```bash
+python -m pytest -q
+python tools/self_check.py
+```
+
+検証対象には以下を含みます。
+
+- JOIN: 前後空白付きキー / 空欄キー / 1対多 / 多対多 / 左右のみ
+- SPLIT: 空欄 / 禁止文字 / Windows予約語 / ファイル名衝突
+- TRANSFORM: 列名変更後の再利用 / 日付変換失敗値保持 / セル内改行
+- Common: CP932読込 / UTF-8 BOM出力 / CRLF / 再読込
+- 100,000行のJOIN / SPLIT / TRANSFORM簡易負荷確認
 
 ## Setup
 
@@ -103,16 +127,13 @@ Python 3.11+ を推奨します。
 
 ## Build Windows EXE
 
+Windows上で `build_windows.bat` を実行します。テストに成功した場合だけPyInstallerで1ファイルEXEを生成します。
+
 ```bat
 build_windows.bat
 ```
 
-または手動で:
-
-```bash
-python -m pip install pyinstaller
-python -m PyInstaller --clean --onefile --noconsole --name CSVjoiner CSVjoiner.py
-```
+内部では `CSVjoiner.spec` を使用し、コンソール非表示・製品バージョン情報付きでビルドします。
 
 生成先:
 
@@ -133,6 +154,9 @@ CSVjoiner/
 │  └─ ui.py
 ├─ sample/
 ├─ tests/
+├─ tools/
+├─ CSVjoiner.spec
+├─ version_info.txt
 ├─ requirements.txt
 ├─ requirements-dev.txt
 ├─ build_windows.bat
@@ -155,10 +179,6 @@ EXPORT
 
 旧版の「CSVを結合するツール」から、v2では「CSV加工そのものを安全に扱うツール」へ刷新しています。
 
-## License
-
-MIT
-
 ### 改行を含むCSVについて
 
 - 引用符 (`"`) で囲まれたセル内改行は、そのまま保持して読み込み・出力します。
@@ -166,3 +186,6 @@ MIT
 - 出力CSVの行区切りは Windows / Excel で扱いやすい CRLF (`\r\n`) に統一します。
 - 引用符が壊れているCSVや、未引用のセル内改行など構文自体が不正なCSVは自動修復しません。元CSVの修正が必要です。
 
+## License
+
+MIT

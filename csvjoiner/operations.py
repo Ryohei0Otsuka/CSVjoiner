@@ -5,7 +5,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from .core import CsvToolError, export_csv, unique_output_path
+from .core import CsvToolError, export_csv, sanitize_filename, unique_output_path
 from .models import JoinDiagnostics, TransformStep
 
 
@@ -88,15 +88,37 @@ def key_join(
         raise CsvToolError("JOIN TYPE は LEFT または INNER を指定してください。")
 
     diagnostics = analyze_key_join(left, right, left_key, right_key)
+
+    # JOIN判定には前後空白を除いたキーを使う一方、出力値そのものは変更しない。
+    # また、空欄キー同士はSQLのNULLに近い扱いとして一致させない。
+    left_work = left.copy()
+    right_work = right.copy()
+    left_temp = "__csvjoiner_left_join_key__"
+    right_temp = "__csvjoiner_right_join_key__"
+    while left_temp in left_work.columns or left_temp in right_work.columns:
+        left_temp = "_" + left_temp
+    while right_temp in left_work.columns or right_temp in right_work.columns or right_temp == left_temp:
+        right_temp = "_" + right_temp
+
+    left_values = left_work[left_key].astype(str).str.strip()
+    right_values = right_work[right_key].astype(str).str.strip()
+    left_work[left_temp] = [value if value else ("__blank_left__", i) for i, value in enumerate(left_values)]
+    right_work[right_temp] = [value if value else ("__blank_right__", i) for i, value in enumerate(right_values)]
+
+    # 左右で同名キーの場合は、右側の原列を落として従来どおりキー列を1本に保つ。
+    if left_key == right_key:
+        right_work = right_work.drop(columns=[right_key])
+
     result = pd.merge(
-        left,
-        right,
+        left_work,
+        right_work,
         how=how,
-        left_on=left_key,
-        right_on=right_key,
+        left_on=left_temp,
+        right_on=right_temp,
         suffixes=("_left", "_right"),
         sort=False,
-    )
+    ).drop(columns=[left_temp, right_temp])
+
     diagnostics.result_rows = len(result)
     return result.fillna(""), diagnostics
 
@@ -123,6 +145,27 @@ def split_dataframe(
         label = raw_key if raw_key else "blank"
         groups[label] = df[key_series == raw_key].copy()
     return groups
+
+
+def split_plan(
+    df: pd.DataFrame,
+    key_column: str,
+    include_blank: bool = False,
+) -> pd.DataFrame:
+    """Return the planned split filenames before writing anything."""
+    groups = split_dataframe(df, key_column, include_blank=include_blank)
+    used: set[str] = set()
+    rows: list[dict[str, object]] = []
+    for label, frame in groups.items():
+        base = sanitize_filename(label)
+        candidate = base
+        index = 2
+        while candidate.lower() in used:
+            candidate = f"{base}_{index}"
+            index += 1
+        used.add(candidate.lower())
+        rows.append({key_column: label if label != "blank" else "(空欄)", "件数": len(frame), "出力ファイル": f"{candidate}.csv"})
+    return pd.DataFrame(rows, columns=[key_column, "件数", "出力ファイル"])
 
 
 def export_split_groups(

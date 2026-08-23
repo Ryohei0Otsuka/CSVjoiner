@@ -9,7 +9,7 @@ import pandas as pd
 from .models import CsvDocument
 
 
-ENCODING_CANDIDATES = ("utf-8-sig", "cp932", "utf-8")
+ENCODING_CANDIDATES = ("utf-8-sig", "utf-8", "cp932")
 EXPORT_ENCODINGS = {
     "UTF-8 BOM": "utf-8-sig",
     "UTF-8": "utf-8",
